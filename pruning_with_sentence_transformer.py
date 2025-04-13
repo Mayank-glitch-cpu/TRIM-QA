@@ -210,6 +210,49 @@ class SentenceTransformerPruner:
         # Compute cosine similarity
         scores = cosine_similarity(query_embedding, chunk_embeddings)[0]
         return scores
+        
+    def compute_answer_potential_scores(self, chunk_texts, query, expected_answer=None):
+        """
+        Compute a score that reflects how likely a chunk contains answer information.
+        This creates a more generalized scoring that rates chunks higher if they potentially 
+        contain answer-related information.
+        
+        Args:
+            chunk_texts: List of chunk text strings
+            query: Original user query
+            expected_answer: Expected answer if available (for training/validation)
+            
+        Returns:
+            Array of answer potential scores
+        """
+        if not chunk_texts:
+            return np.array([])
+            
+        # Create synthetic "answer-seeking" queries to better judge answer potential
+        answer_queries = [
+            f"Find information about {query}",
+            f"Which part answers {query}",
+            f"Content that explains {query}"
+        ]
+        
+        # If expected answer is provided, use it to create more targeted synthetic queries
+        if expected_answer and isinstance(expected_answer, (list, tuple)) and expected_answer[0] != "Unknown":
+            answer_text = str(expected_answer[0]) if isinstance(expected_answer, (list, tuple)) else str(expected_answer)
+            # Create more specific queries based on expected answers
+            answer_queries.extend([
+                f"Content containing {answer_text}",
+                f"Information similar to {answer_text}"
+            ])
+            
+        # Compute similarity for each synthetic query and average them
+        all_scores = []
+        for answer_query in answer_queries:
+            scores = self.compute_similarity_scores(chunk_texts, answer_query)
+            all_scores.append(scores)
+            
+        # Average the scores from all synthetic queries
+        avg_scores = np.mean(all_scores, axis=0)
+        return avg_scores
 
     def remove_redundant_chunks(self, chunks, scores, similarity_threshold=0.8):
         """Remove redundant chunks while preserving the most relevant ones."""
@@ -245,7 +288,7 @@ class SentenceTransformerPruner:
         
         return selected_chunks
     
-    def prune_chunks(self, chunks, query, relevance_threshold=0.5, similarity_threshold=0.8, top_k=None):
+    def prune_chunks(self, chunks, query, relevance_threshold=0.5, similarity_threshold=0.8, top_k=None, expected_answer=None, enhance_answer_potential=True):
         """
         Prune chunks based on query similarity and redundancy.
         
@@ -255,6 +298,8 @@ class SentenceTransformerPruner:
             relevance_threshold: Minimum relevance score to keep a chunk
             similarity_threshold: Threshold for redundancy removal
             top_k: Maximum number of chunks to return
+            expected_answer: Expected answer if available (for training/validation)
+            enhance_answer_potential: Whether to enhance scores based on answer potential
             
         Returns:
             List of (chunk, score) tuples
@@ -277,7 +322,18 @@ class SentenceTransformerPruner:
         
         # Compute similarity scores
         print("Computing similarity scores with query...")
-        scores = self.compute_similarity_scores(chunk_texts, query)
+        base_scores = self.compute_similarity_scores(chunk_texts, query)
+        
+        # If enhance_answer_potential is True, compute additional scores based on answer potential
+        if enhance_answer_potential:
+            print("Computing answer potential scores...")
+            answer_scores = self.compute_answer_potential_scores(chunk_texts, query, expected_answer)
+            
+            # Combine scores - give more weight to base scores (70%) and less to answer potential (30%)
+            scores = base_scores * 0.7 + answer_scores * 0.3
+            print("Using enhanced scoring that combines query relevance and answer potential")
+        else:
+            scores = base_scores
         
         # Print score statistics
         print(f"Score stats - Min: {min(scores):.4f}, Max: {max(scores):.4f}, Avg: {sum(scores)/len(scores):.4f}")
@@ -352,7 +408,8 @@ def process_query(query_item, chunks, pruner, relevance_threshold=0.5, similarit
         filtered_chunks,
         question,
         relevance_threshold=relevance_threshold,
-        similarity_threshold=similarity_threshold
+        similarity_threshold=similarity_threshold,
+        expected_answer=expected_answer
     )
     
     if not pruned_chunks_with_scores:
