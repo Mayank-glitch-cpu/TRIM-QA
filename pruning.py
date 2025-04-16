@@ -326,8 +326,8 @@ class CombinedModule(nn.Module):
         super(CombinedModule, self).__init__()
         self.urs_module = URSModule(hidden_dim)
         self.ws_module = WeakSupervisionModule(hidden_dim)
-        self.lambda_urs = 0.6  # weight for unsupervised relevance score ----> can be tuned
-        self.lambda_ws = 0.4   # weight for weak supervision score  ----> can be tuned
+        self.lambda_urs = 0.8  # weight for unsupervised relevance score ----> can be tuned
+        self.lambda_ws = 0.2   # weight for weak supervision score  ----> can be tuned
     
     def forward(self, chunk_embeddings, query_embedding=None):
         """

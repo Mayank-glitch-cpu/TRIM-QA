@@ -10,3 +10,9 @@ pruning_results_st/
 pruned_chunks/
 Top-150-Quries/
 pruned-chunks-json/
+hyperparameter_search/
+labled_data/
+quick_hyperparameter_search/
+test_evaluation/
+test_evaluation_best_model/
+trained_models/
